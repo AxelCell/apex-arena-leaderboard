@@ -1,0 +1,5 @@
+﻿RESULT reqs/s=1247.1 failed=0.00%
+all              p50=30.21ms p95=108.76ms p99=162.98ms
+top_overall      p50=23.83ms p95=85.58ms p99=129.90ms
+top_difficulty   p50=23.81ms p95=84.61ms p99=127.37ms
+player_rank      p50=58.43ms p95=143.91ms p99=200.88ms
