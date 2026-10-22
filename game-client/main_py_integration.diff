@@ -1,0 +1,201 @@
+--- a/main.py
++++ b/main.py
+@@ -23,6 +23,7 @@
+ import pygame
+ 
+ import art
++import leaderboard_client as lb
+ from data import (WW, WH, PF, TYPE_COL, type_mult, MOVES, KIND_HINT, SPECIES, ROSTER,
+                   ARENAS, ARENA_NAMES, LEAGUE, DIFFS)
+ 
+@@ -1441,7 +1442,7 @@
+ 
+ 
+ # ---------------------------------------------------------------- game shell
+-TITLE_ITEMS = ["LEAGUE", "QUICK BATTLE", "2 PLAYER VERSUS", "WATCH A BATTLE", "HOW TO PLAY", "QUIT"]
++TITLE_ITEMS = ["LEAGUE", "QUICK BATTLE", "2 PLAYER VERSUS", "WATCH A BATTLE", "LEADERBOARD", "HOW TO PLAY", "QUIT"]
+ UP = (K.K_w, K.K_UP)
+ DOWN = (K.K_s, K.K_DOWN)
+ LEFT = (K.K_a, K.K_LEFT)
+@@ -1464,8 +1465,13 @@
+         self.mute = False
+         self.keys = set()
+         self.t = 0.0
+-        self.state, self.sel = "title", 0
++        self.state, self.sel = "name", 0
+         self.mode = None
++        self.net = lb.Client()
++        self.player = lb.load_name()
++        self.name_buf, self.name_err = self.player, ""
++        self.board_i = 0
++        self.typed = ""
+         self.crowd = art.crowd_band(SW, HUD_H)
+         self.wall = art.crowd_band(SW, SH, 11)
+         self.spr = {k: art.creature(k) for k in ROSTER}
+@@ -1530,10 +1536,11 @@
+             return
+         self.keys.add(e.key)
+         k = e.key
++        self.typed = getattr(e, "unicode", "")
+         if k == K.K_F11:
+             pygame.display.toggle_fullscreen()
+             return
+-        if k == K.K_m:
++        if k == K.K_m and self.state != "name":
+             self.mute = not self.mute
+             return
+         getattr(self, "key_" + self.state)(k)
+@@ -1550,6 +1557,9 @@
+                 sys.exit()
+             elif it == "HOW TO PLAY":
+                 self.state = "help"
++            elif it == "LEADERBOARD":
++                self.state = "board"
++                self.net.fetch_board(lb.BOARDS[self.board_i][0], self.player, force=True)
+             elif it == "WATCH A BATTLE":
+                 self.mode = "watch"
+                 self.start_watch()
+@@ -1557,6 +1567,38 @@
+                 self.mode = {"LEAGUE": "league", "QUICK BATTLE": "quick", "2 PLAYER VERSUS": "versus"}[it]
+                 self.state, self.stage = "select", 0
+ 
++    def key_name(self, k):
++        if k in (K.K_RETURN, K.K_KP_ENTER):
++            name = self.name_buf.strip()
++            if not lb.valid_name(name):
++                self.name_err = "3-16 letters, digits or _"
++                self.sfx("blip")
++                return
++            self.player = name
++            lb.save_name(name)
++            self.sfx("ok")
++            self.title()
++        elif k == K.K_ESCAPE and lb.valid_name(self.player):
++            self.title()
++        elif k == K.K_BACKSPACE:
++            self.name_buf, self.name_err = self.name_buf[:-1], ""
++        elif self.typed and len(self.name_buf) < 16 and lb.valid_name("ab" + self.typed):
++            self.name_buf, self.name_err = self.name_buf + self.typed, ""
++
++    def key_board(self, k):
++        if k in LEFT or k in RIGHT:
++            self.board_i = (self.board_i + (1 if k in RIGHT else -1)) % len(lb.BOARDS)
++            self.net.fetch_board(lb.BOARDS[self.board_i][0], self.player)
++            self.sfx("blip")
++        elif k == K.K_r:
++            self.net.fetch_board(lb.BOARDS[self.board_i][0], self.player, force=True)
++            self.sfx("blip")
++        elif k == K.K_n:
++            self.name_buf, self.name_err = self.player, ""
++            self.state = "name"
++        elif k in BACK or k in OK:
++            self.title()
++
+     def key_help(self, k):
+         if k in OK or k in BACK:
+             self.title()
+@@ -1671,10 +1713,25 @@
+             w = self.world
+             w.update(dt, [None if f.ai else self.intent(f.ctrl) for f in w.f])
+             if w.phase == "done":
++                if not getattr(w, "reported", False):
++                    w.reported = True
++                    self.report(w)
+                 self.done_t += dt
+                 if self.mode == "watch" and self.done_t > 3.0:
+                     self.start_watch()
+ 
++    def report(self, w):
++        """Send the result to the leaderboard service (non-blocking)."""
++        self.net.last_submit = None
++        if self.mode not in ("quick", "league") or not self.player:
++            return
++        me = w.f[0]
++        if me.ai or not w.f[1].ai or not w.diff:
++            return
++        hp_pct = round(100 * max(0.0, me.hp) / me.maxhp)
++        self.net.submit(self.player, me.key, w.diff, self.mode, w.winner is me,
++                        hp_pct, 99.0 - w.time)
++
+     # --- drawing
+     def draw(self):
+         getattr(self, "draw_" + self.state)()
+@@ -1705,12 +1762,60 @@
+             y = 300 + (i // 2) * 170 + math.sin(self.t * 2 + i) * 6
+             s.blit(img, (x - img.get_width() // 2, y - img.get_height() // 2))
+         for i, it in enumerate(TITLE_ITEMS):
+-            y = 352 + i * 54
++            y = 340 + i * 48
+             on = i == self.sel
+-            panel(s, (SW // 2 - 190, y - 22, 380, 46), (250, 208, 72) if on else (20, 20, 44), 235 if on else 200, 10,
++            panel(s, (SW // 2 - 190, y - 20, 380, 42), (250, 208, 72) if on else (20, 20, 44), 235 if on else 200, 10,
+                   WHITE if on else (90, 90, 130), 3)
+             txt(s, it, F["m"], INK if on else WHITE, SW // 2, y, ol=0 if on else 2)
+         txt(s, "W/S choose   -   J or ENTER select   -   F11 fullscreen   -   M mute", F["s"], (210, 210, 230), SW // 2, SH - 22)
++        if self.player:
++            txt(s, "PLAYER: " + self.player.upper(), F["s"], GOLD, SW - 20, 20, "r")
++
++    def draw_name(self):
++        s = self.screen
++        self.backdrop(200)
++        self.logo(110, 0.5)
++        txt(s, "ENTER YOUR PLAYER NAME", F["l"], WHITE, SW // 2, 300, ol=3)
++        panel(s, (SW // 2 - 240, 340, 480, 70), (20, 20, 44), 230, 12, GOLD, 3)
++        cursor = "_" if int(self.t * 2) % 2 == 0 else " "
++        txt(s, self.name_buf.upper() + cursor, F["l"], GOLD, SW // 2, 375, ol=2)
++        txt(s, self.name_err or "Used on the online leaderboard", F["s"],
++            (240, 110, 110) if self.name_err else (200, 200, 225), SW // 2, 440)
++        hint = "ENTER confirm   -   BACKSPACE delete" + ("   -   ESC keep current" if lb.valid_name(self.player) else "")
++        txt(s, hint, F["s"], (210, 210, 230), SW // 2, SH - 26)
++
++    def draw_board(self):
++        s = self.screen
++        self.backdrop(215)
++        txt(s, "LEADERBOARD", F["xl"], GOLD, SW // 2, 56, ol=4)
++        for i, (label, _) in enumerate(lb.BOARDS):
++            x = SW // 2 + (i - (len(lb.BOARDS) - 1) / 2) * 170
++            on = i == self.board_i
++            panel(s, (x - 76, 104, 152, 38), GOLD if on else (20, 20, 44), 235, 10, WHITE if on else (90, 90, 130), 2)
++            txt(s, label, F["s"], INK if on else WHITE, x, 123, ol=0 if on else 1)
++        label = lb.BOARDS[self.board_i][0]
++        self.net.fetch_board(label, self.player)   # no-op unless the data is stale (>10s)
++        b = self.net.boards.get(label) or dict(state="loading", entries=[], me=None)
++        panel(s, (SW // 2 - 330, 158, 660, 452), (12, 12, 30), 225, 14, (90, 90, 130), 2)
++        if b["state"] == "error" and not b["entries"]:
++            txt(s, "LEADERBOARD OFFLINE", F["l"], (240, 110, 110), SW // 2, 330, ol=3)
++            txt(s, "Start the server, then press R to retry", F["s"], WHITE, SW // 2, 372)
++        elif not b["entries"]:
++            txt(s, "Loading..." if b["state"] == "loading" else "No scores yet - go win a fight!", F["m"], WHITE, SW // 2, 350)
++        for i, e in enumerate(b["entries"][:10]):
++            y = 190 + i * 40
++            mine = e["playerName"] == self.player.lower()
++            if mine:
++                panel(s, (SW // 2 - 316, y - 17, 632, 34), (70, 56, 20), 220, 8)
++            col = GOLD if e["rank"] == 1 or mine else WHITE
++            txt(s, "#%d" % e["rank"], F["m"], col, SW // 2 - 280, y, "l")
++            txt(s, e["playerName"].upper(), F["m"], col, SW // 2 - 180, y, "l")
++            txt(s, "%d PTS" % e["points"], F["m"], col, SW // 2 + 290, y, "r")
++        me = b.get("me")
++        line = ("YOU (%s):  RANK #%d of %d   -   BEST %d PTS" % (self.player.upper(), me["rank"], me["totalPlayers"], me["bestPoints"])
++                if me else "YOU (%s): no score on this board yet" % self.player.upper())
++        txt(s, line, F["s"], P_COL[0], SW // 2, 636)
++        txt(s, "A/D switch board   -   R refresh   -   N change name   -   K back", F["s"], (210, 210, 230), SW // 2, SH - 26)
+ 
+     def draw_help(self):
+         s = self.screen
+@@ -2000,6 +2105,15 @@
+         a, b = w.f
+         txt(s, "Damage dealt      %s %d      %s %d" % (a.name, a.dealt, b.name, b.dealt), F["s"], WHITE, SW // 2, 436)
+         txt(s, "Best combo      %s %d      %s %d" % (a.name, a.maxcombo, b.name, b.maxcombo), F["s"], WHITE, SW // 2, 462)
++        sub = self.net.last_submit
++        if sub and self.mode in ("quick", "league"):
++            if sub["state"] == "ok":
++                line, lc = "+%d PTS   -   LEADERBOARD RANK #%d" % (sub["points"], sub["rank"]), GOLD
++            elif sub["state"] == "error":
++                line, lc = sub.get("msg", "score not saved")[:60], (240, 120, 120)
++            else:
++                line, lc = "Submitting score...", (200, 200, 225)
++            txt(s, line, F["s"], lc, SW // 2, 490)
+         if self.mode == "league":
+             hint = "J: continue" if win.side == 0 else "J: try again      K: quit"
+         elif self.mode == "watch":
