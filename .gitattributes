@@ -1,2 +1,7 @@
-/mvnw text eol=lf
+# Normalize to LF in the repo; Windows scripts keep CRLF.
+* text=auto eol=lf
 *.cmd text eol=crlf
+*.ps1 text eol=crlf
+/mvnw text eol=lf
+*.jar binary
+*.png binary
