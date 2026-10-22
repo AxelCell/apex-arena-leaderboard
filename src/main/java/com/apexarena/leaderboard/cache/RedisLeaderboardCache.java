@@ -4,6 +4,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -18,6 +19,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.data.redis.connection.RedisZSetCommands.ZAddArgs;
+import org.springframework.data.redis.connection.zset.DefaultTuple;
+import org.springframework.data.redis.connection.zset.Tuple;
 import org.springframework.data.redis.core.Cursor;
 import org.springframework.data.redis.core.RedisCallback;
 import org.springframework.data.redis.core.ScanOptions;
@@ -58,6 +61,8 @@ public class RedisLeaderboardCache implements LeaderboardCache {
     static final String KEY_PREFIX = "lb:";
     /** Marks a fully loaded board. Score -1 sorts it below every real player (points >= 0). */
     static final String SENTINEL = "\u0000complete";
+
+    private static final int LOAD_BATCH = 1000;
 
     private final StringRedisTemplate redis;
     private final ScoreRepository repository;
@@ -158,9 +163,15 @@ public class RedisLeaderboardCache implements LeaderboardCache {
             List<PlayerBest> all = repository.allPlayers(board);
             ZAddArgs gt = ZAddArgs.empty().gt();
             byte[] k = bytes(key);
-            redis.executePipelined((RedisCallback<Object>) conn -> {
-                for (PlayerBest p : all) {
-                    conn.zSetCommands().zAdd(k, p.points(), bytes(p.playerName()), gt);
+            // Variadic ZADD in batches (ZADD key GT s1 m1 s2 m2 ...): 20k players = 20 commands,
+            // not 20k. One command per player overran the Redis timeout under load (found by k6).
+            redis.execute((RedisCallback<Object>) conn -> {
+                for (int i = 0; i < all.size(); i += LOAD_BATCH) {
+                    Set<Tuple> batch = new HashSet<>();
+                    for (PlayerBest p : all.subList(i, Math.min(all.size(), i + LOAD_BATCH))) {
+                        batch.add(new DefaultTuple(bytes(p.playerName()), (double) p.points()));
+                    }
+                    conn.zSetCommands().zAdd(k, batch, gt);
                 }
                 conn.zSetCommands().zAdd(k, -1, bytes(SENTINEL));
                 conn.keyCommands().expire(k, ttl.toSeconds());

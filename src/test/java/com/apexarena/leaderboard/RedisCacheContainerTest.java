@@ -13,6 +13,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
@@ -42,6 +43,7 @@ class RedisCacheContainerTest {
 
     @Autowired MockMvc mvc;
     @Autowired StringRedisTemplate redisTemplate;
+    @Autowired JdbcTemplate jdbc;
 
     @Test
     void leaderboardIsServedFromRedisAndUpdatedOnWrite() throws Exception {
@@ -68,5 +70,26 @@ class RedisCacheContainerTest {
         mvc.perform(signedPost(fightJson("bravo", "krakoral", "easy", false, 0, 60))).andExpect(status().isCreated());
         mvc.perform(get("/api/players/bravo/rank").param("monster", "krakoral"))
                 .andExpect(jsonPath("$.rank").value(1));
+    }
+
+    /** Regression: loading a large board used to send one ZADD per player and time out. */
+    @Test
+    void loadsALargeBoardIntoRedis() throws Exception {
+        int players = 20_000;
+        // One set-based INSERT (players bulk0..bulk19999) instead of 20k round trips.
+        jdbc.execute("SET SESSION cte_max_recursion_depth = 30000");
+        jdbc.update("INSERT INTO scores (player_name, monster, difficulty, game_mode, won, hp_left_percent, "
+                + "fight_seconds, points, submitted_at) "
+                + "WITH RECURSIVE seq(n) AS (SELECT 0 UNION ALL SELECT n + 1 FROM seq WHERE n < ?) "
+                + "SELECT CONCAT('bulk', n), 'bulkox', 'EASY', 'QUICK', TRUE, 50, 30, MOD(n, 1250), NOW(6) FROM seq",
+                players - 1);
+
+        mvc.perform(get("/api/leaderboard/top").param("monster", "bulkox").param("n", "3"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.entries[0].points").value(1249));
+
+        assertThat(redisTemplate.opsForZSet().zCard("lb:monster:bulkox")).isEqualTo(players + 1L);  // + sentinel
+        mvc.perform(get("/api/players/bulk0/rank").param("monster", "bulkox"))
+                .andExpect(jsonPath("$.totalPlayers").value(players));
     }
 }
