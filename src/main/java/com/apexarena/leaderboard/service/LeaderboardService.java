@@ -3,13 +3,17 @@ package com.apexarena.leaderboard.service;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.apexarena.leaderboard.cache.LeaderboardCache;
+import com.apexarena.leaderboard.cache.ScoreSubmittedEvent;
 import com.apexarena.leaderboard.config.GameProperties;
 import com.apexarena.leaderboard.domain.Board;
 import com.apexarena.leaderboard.domain.Score;
@@ -30,14 +34,19 @@ public class LeaderboardService {
     private final ScoreCalculator calculator;
     private final Set<String> monsters;
     private final Clock clock;
+    private final LeaderboardCache cache;
+    private final ApplicationEventPublisher events;
 
     // Constructor injection: Spring passes in the beans; fields stay final and testable.
     public LeaderboardService(ScoreRepository repository, ScoreCalculator calculator,
-                              GameProperties props, Clock clock) {
+                              GameProperties props, Clock clock, LeaderboardCache cache,
+                              ApplicationEventPublisher events) {
         this.repository = repository;
         this.calculator = calculator;
         this.monsters = props.monsterSet();
         this.clock = clock;
+        this.cache = cache;
+        this.events = events;
     }
 
     @Transactional
@@ -51,14 +60,20 @@ public class LeaderboardService {
         int points = calculator.points(req.difficulty(), req.won(), req.hpLeftPercent(), req.fightSeconds());
         Score score = repository.save(new Score(null, player, monster, req.difficulty(), req.mode(),
                 req.won(), req.hpLeftPercent(), req.fightSeconds(), points, Instant.now(clock)));
+        // The cache is updated by CacheUpdater after this transaction commits.
+        events.publishEvent(new ScoreSubmittedEvent(score));
 
-        PlayerRankResponse rank = rank(player, Board.overall());
+        // Rank from the database, inside this transaction, so it already includes the new score.
+        PlayerRankResponse rank = rankFromDatabase(player, Board.overall());
         return ScoreResponse.from(score, rank.bestPoints(), rank.rank());
     }
 
-    @Transactional(readOnly = true)
     public LeaderboardResponse top(Board board, int n) {
-        List<PlayerBest> rows = repository.topPlayers(board, n);
+        List<PlayerBest> rows = cache.top(board, n)
+                // Redis orders equal scores by name descending; use the same order as SQL.
+                .map(list -> list.stream().sorted(Comparator.comparingInt(PlayerBest::points).reversed()
+                        .thenComparing(PlayerBest::playerName)).toList())
+                .orElseGet(() -> repository.topPlayers(board, n));
         List<LeaderboardEntry> entries = new ArrayList<>(rows.size());
         int rank = 0;
         for (int i = 0; i < rows.size(); i++) {
@@ -71,9 +86,21 @@ public class LeaderboardService {
         return new LeaderboardResponse(board.key(), entries);
     }
 
-    @Transactional(readOnly = true)
     public PlayerRankResponse rank(String rawName, Board board) {
         String playerName = normalizeName(rawName);
+        var cached = cache.rank(board, playerName);
+        if (cached.isPresent()) {
+            var c = cached.get();
+            if (c.bestPoints() == null) {
+                throw new PlayerNotFoundException(playerName, board.key());
+            }
+            return new PlayerRankResponse(playerName, board.key(), (int) c.playersAbove() + 1, c.bestPoints(),
+                    c.totalPlayers());
+        }
+        return rankFromDatabase(playerName, board);
+    }
+
+    private PlayerRankResponse rankFromDatabase(String playerName, Board board) {
         int best = repository.bestPoints(board, playerName)
                 .orElseThrow(() -> new PlayerNotFoundException(playerName, board.key()));
         long above = repository.countPlayersAbove(board, best);
