@@ -83,6 +83,9 @@ class RedisCacheContainerTest {
                 + "WITH RECURSIVE seq(n) AS (SELECT 0 UNION ALL SELECT n + 1 FROM seq WHERE n < ?) "
                 + "SELECT CONCAT('bulk', n), 'bulkox', 'EASY', 'QUICK', TRUE, 50, 30, MOD(n, 1250), NOW(6) FROM seq",
                 players - 1);
+        jdbc.update("INSERT INTO player_best (board_key, player_name, best_points) "
+                + "SELECT 'monster:bulkox', player_name, MAX(points) FROM scores WHERE monster = 'bulkox' "
+                + "GROUP BY player_name");
 
         mvc.perform(get("/api/leaderboard/top").param("monster", "bulkox").param("n", "3"))
                 .andExpect(status().isOk())

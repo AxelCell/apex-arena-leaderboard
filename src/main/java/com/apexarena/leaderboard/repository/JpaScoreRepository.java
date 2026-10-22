@@ -3,28 +3,53 @@ package com.apexarena.leaderboard.repository;
 import java.util.List;
 import java.util.Optional;
 
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Pageable;
+import org.springframework.jdbc.core.RowMapper;
+import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 
 import com.apexarena.leaderboard.domain.Board;
-import com.apexarena.leaderboard.domain.Difficulty;
 import com.apexarena.leaderboard.domain.Score;
 
-/** Adapts the Spring Data repository to our {@link ScoreRepository} interface. */
+/**
+ * MySQL-backed {@link ScoreRepository}.
+ * <ul>
+ *   <li>{@code scores}: every fight (history, source of truth), written with JPA.</li>
+ *   <li>{@code player_best}: each player's best per board, kept up to date with an atomic
+ *       upsert in the same transaction. Leaderboard reads only touch this small table,
+ *       through plain SQL ({@link JdbcClient}) since they are simple indexed lookups.</li>
+ * </ul>
+ */
 @Repository
 public class JpaScoreRepository implements ScoreRepository {
 
-    private final SpringDataScoreRepository jpa;
+    // Atomic "keep the max": the row lock taken by the upsert makes concurrent submits safe.
+    private static final String UPSERT_BEST = """
+            INSERT INTO player_best (board_key, player_name, best_points) VALUES (:board, :player, :points)
+            ON DUPLICATE KEY UPDATE best_points = GREATEST(best_points, VALUES(best_points))""";
 
-    public JpaScoreRepository(SpringDataScoreRepository jpa) {
+    private static final RowMapper<PlayerBest> PLAYER_BEST =
+            (rs, i) -> new PlayerBest(rs.getString("player_name"), rs.getInt("best_points"));
+
+    private final SpringDataScoreRepository jpa;
+    private final JdbcClient jdbc;
+
+    public JpaScoreRepository(SpringDataScoreRepository jpa, JdbcClient jdbc) {
         this.jpa = jpa;
+        this.jdbc = jdbc;
     }
 
     @Override
     public Score save(Score score) {
         // saveAndFlush: run the INSERT now, so a duplicate fightId fails inside this call
-        return jpa.saveAndFlush(ScoreEntity.from(score)).toDomain();
+        Score saved = jpa.saveAndFlush(ScoreEntity.from(score)).toDomain();
+        for (Board b : Board.boardsFor(saved)) {
+            jdbc.sql(UPSERT_BEST)
+                    .param("board", b.key())
+                    .param("player", saved.playerName())
+                    .param("points", saved.points())
+                    .update();
+        }
+        return saved;
     }
 
     @Override
@@ -34,34 +59,46 @@ public class JpaScoreRepository implements ScoreRepository {
 
     @Override
     public List<PlayerBest> topPlayers(Board board, int limit) {
-        return jpa.bestPerPlayer(difficulty(board), monster(board), PageRequest.of(0, limit));
+        return jdbc.sql("""
+                        SELECT player_name, best_points FROM player_best WHERE board_key = :board
+                        ORDER BY best_points DESC, player_name LIMIT :limit""")
+                .param("board", board.key())
+                .param("limit", limit)
+                .query(PLAYER_BEST)
+                .list();
     }
 
     @Override
     public List<PlayerBest> allPlayers(Board board) {
-        return jpa.bestPerPlayer(difficulty(board), monster(board), Pageable.unpaged());
+        return jdbc.sql("SELECT player_name, best_points FROM player_best WHERE board_key = :board")
+                .param("board", board.key())
+                .query(PLAYER_BEST)
+                .list();
     }
 
     @Override
     public Optional<Integer> bestPoints(Board board, String playerName) {
-        return Optional.ofNullable(jpa.bestPoints(playerName, difficulty(board), monster(board)));
+        return jdbc.sql("SELECT best_points FROM player_best WHERE board_key = :board AND player_name = :player")
+                .param("board", board.key())
+                .param("player", playerName)
+                .query(Integer.class)
+                .optional();
     }
 
     @Override
     public long countPlayersAbove(Board board, int points) {
-        return jpa.countPlayersAbove(points, difficulty(board), monster(board));
+        return jdbc.sql("SELECT COUNT(*) FROM player_best WHERE board_key = :board AND best_points > :points")
+                .param("board", board.key())
+                .param("points", points)
+                .query(Long.class)
+                .single();
     }
 
     @Override
     public long countPlayers(Board board) {
-        return jpa.countPlayers(difficulty(board), monster(board));
-    }
-
-    private static Difficulty difficulty(Board b) {
-        return b.type() == Board.Type.DIFFICULTY ? Difficulty.from(b.value()) : null;
-    }
-
-    private static String monster(Board b) {
-        return b.type() == Board.Type.MONSTER ? b.value() : null;
+        return jdbc.sql("SELECT COUNT(*) FROM player_best WHERE board_key = :board")
+                .param("board", board.key())
+                .query(Long.class)
+                .single();
     }
 }

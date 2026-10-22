@@ -10,6 +10,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
+import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabase;
 import org.springframework.context.annotation.Import;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.test.context.ActiveProfiles;
@@ -19,8 +20,10 @@ import com.apexarena.leaderboard.domain.Difficulty;
 import com.apexarena.leaderboard.domain.GameMode;
 import com.apexarena.leaderboard.domain.Score;
 
-/** Runs the real JPQL against H2 with the real Flyway schema. */
-@DataJpaTest
+/** Runs the real SQL against H2 (MySQL mode, from the test profile) with the real Flyway schema. */
+// Own in-memory database so data committed by other test classes cannot leak in.
+@DataJpaTest(properties = "spring.datasource.url=jdbc:h2:mem:repotest;MODE=MySQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1")
+@AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)   // keep MODE=MySQL
 @ActiveProfiles("test")
 @Import(JpaScoreRepository.class)
 class JpaScoreRepositoryTest {
