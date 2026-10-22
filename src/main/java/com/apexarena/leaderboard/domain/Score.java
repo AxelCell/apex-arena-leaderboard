@@ -1,11 +1,13 @@
 package com.apexarena.leaderboard.domain;
 
 import java.time.Instant;
-import java.util.UUID;
 
-/** One finished fight. Immutable: a score is never edited after it is recorded. */
+/**
+ * One finished fight. Immutable: a score is never edited after it is recorded.
+ * {@code id} is null until the database assigns one.
+ */
 public record Score(
-        UUID id,
+        Long id,
         String playerName,
         String monster,
         Difficulty difficulty,
@@ -15,4 +17,9 @@ public record Score(
         double fightSeconds,
         int points,
         Instant submittedAt
-) {}
+) {
+    public Score withId(Long newId) {
+        return new Score(newId, playerName, monster, difficulty, mode, won, hpLeftPercent, fightSeconds,
+                points, submittedAt);
+    }
+}

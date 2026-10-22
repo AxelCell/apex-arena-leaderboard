@@ -1,14 +1,13 @@
 package com.apexarena.leaderboard.dto;
 
 import java.time.Instant;
-import java.util.UUID;
 
 import com.apexarena.leaderboard.domain.Difficulty;
 import com.apexarena.leaderboard.domain.Score;
 
 /** What the game gets back after submitting: the points earned and the new overall rank. */
 public record ScoreResponse(
-        UUID id,
+        Long id,
         String playerName,
         String monster,
         Difficulty difficulty,

@@ -6,9 +6,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
-import java.util.UUID;
 
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.apexarena.leaderboard.config.GameProperties;
 import com.apexarena.leaderboard.domain.Board;
@@ -20,8 +20,8 @@ import com.apexarena.leaderboard.dto.ScoreResponse;
 import com.apexarena.leaderboard.dto.SubmitScoreRequest;
 import com.apexarena.leaderboard.exception.InvalidScoreException;
 import com.apexarena.leaderboard.exception.PlayerNotFoundException;
+import com.apexarena.leaderboard.repository.PlayerBest;
 import com.apexarena.leaderboard.repository.ScoreRepository;
-import com.apexarena.leaderboard.repository.ScoreRepository.PlayerBest;
 
 @Service
 public class LeaderboardService {
@@ -40,20 +40,23 @@ public class LeaderboardService {
         this.clock = clock;
     }
 
+    @Transactional
     public ScoreResponse submit(SubmitScoreRequest req) {
+        // Names are case-insensitive identities ("Aish" and "aish" are one player).
+        String player = normalizeName(req.playerName());
         String monster = req.monster().trim().toLowerCase(Locale.ROOT);
         if (!monsters.contains(monster)) {
             throw new InvalidScoreException("Unknown monster '" + req.monster() + "'");
         }
         int points = calculator.points(req.difficulty(), req.won(), req.hpLeftPercent(), req.fightSeconds());
-        Score score = new Score(UUID.randomUUID(), req.playerName(), monster, req.difficulty(), req.mode(),
-                req.won(), req.hpLeftPercent(), req.fightSeconds(), points, Instant.now(clock));
-        repository.save(score);
+        Score score = repository.save(new Score(null, player, monster, req.difficulty(), req.mode(),
+                req.won(), req.hpLeftPercent(), req.fightSeconds(), points, Instant.now(clock)));
 
-        PlayerRankResponse rank = rank(req.playerName(), Board.overall());
+        PlayerRankResponse rank = rank(player, Board.overall());
         return ScoreResponse.from(score, rank.bestPoints(), rank.rank());
     }
 
+    @Transactional(readOnly = true)
     public LeaderboardResponse top(Board board, int n) {
         List<PlayerBest> rows = repository.topPlayers(board, n);
         List<LeaderboardEntry> entries = new ArrayList<>(rows.size());
@@ -68,10 +71,16 @@ public class LeaderboardService {
         return new LeaderboardResponse(board.key(), entries);
     }
 
-    public PlayerRankResponse rank(String playerName, Board board) {
+    @Transactional(readOnly = true)
+    public PlayerRankResponse rank(String rawName, Board board) {
+        String playerName = normalizeName(rawName);
         int best = repository.bestPoints(board, playerName)
                 .orElseThrow(() -> new PlayerNotFoundException(playerName, board.key()));
         long above = repository.countPlayersAbove(board, best);
         return new PlayerRankResponse(playerName, board.key(), (int) above + 1, best, repository.countPlayers(board));
+    }
+
+    static String normalizeName(String name) {
+        return name.trim().toLowerCase(Locale.ROOT);
     }
 }

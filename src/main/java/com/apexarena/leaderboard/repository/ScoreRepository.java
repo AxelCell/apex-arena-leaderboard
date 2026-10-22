@@ -7,8 +7,8 @@ import com.apexarena.leaderboard.domain.Board;
 import com.apexarena.leaderboard.domain.Score;
 
 /**
- * Storage abstraction. The service depends on this interface, not on a concrete
- * store, so the in-memory version can later be swapped for a database one.
+ * Storage abstraction the service depends on. The JPA implementation lives in
+ * {@link JpaScoreRepository}; the service never sees JPA entities or SQL.
  */
 public interface ScoreRepository {
 
@@ -17,12 +17,13 @@ public interface ScoreRepository {
     /** Each player's single best score on the board, highest first, at most {@code limit} rows. */
     List<PlayerBest> topPlayers(Board board, int limit);
 
+    /** Every player's best on the board (used to rebuild a cache). */
+    List<PlayerBest> allPlayers(Board board);
+
     Optional<Integer> bestPoints(Board board, String playerName);
 
     /** How many players have a best score strictly greater than {@code points}. */
     long countPlayersAbove(Board board, int points);
 
     long countPlayers(Board board);
-
-    record PlayerBest(String playerName, int points) {}
 }
