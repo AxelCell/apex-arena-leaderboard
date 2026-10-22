@@ -1,4 +1,25 @@
+# Full stack:            docker compose up -d --build
+# Only MySQL + Redis:    docker compose up -d mysql redis   (then run the app from the IDE)
 services:
+  app:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      DB_URL: jdbc:mysql://mysql:3306/leaderboard
+      DB_USER: leaderboard
+      DB_PASSWORD: leaderboard
+      REDIS_HOST: redis
+      HMAC_SECRET: ${HMAC_SECRET:-dev-secret-change-me}
+      CACHE_ENABLED: ${CACHE_ENABLED:-true}
+      RATE_LIMIT_ENABLED: ${RATE_LIMIT_ENABLED:-true}
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
   mysql:
     image: mysql:8.4
     environment:
