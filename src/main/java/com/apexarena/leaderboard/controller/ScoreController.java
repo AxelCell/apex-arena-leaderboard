@@ -8,7 +8,6 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import com.apexarena.leaderboard.domain.Score;
 import com.apexarena.leaderboard.dto.ScoreResponse;
 import com.apexarena.leaderboard.dto.SubmitScoreRequest;
 import com.apexarena.leaderboard.service.LeaderboardService;
@@ -27,8 +26,7 @@ public class ScoreController {
 
     @PostMapping
     public ResponseEntity<ScoreResponse> submit(@Valid @RequestBody SubmitScoreRequest req) {
-        Score saved = service.submit(req);
-        return ResponseEntity.created(URI.create("/api/scores/" + saved.id()))
-                .body(ScoreResponse.from(saved));
+        ScoreResponse saved = service.submit(req);
+        return ResponseEntity.created(URI.create("/api/scores/" + saved.id())).body(saved);
     }
 }

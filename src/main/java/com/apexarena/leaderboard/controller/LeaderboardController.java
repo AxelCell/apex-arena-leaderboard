@@ -1,13 +1,12 @@
 package com.apexarena.leaderboard.controller;
 
-import java.util.List;
-
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import com.apexarena.leaderboard.dto.LeaderboardEntry;
+import com.apexarena.leaderboard.domain.Board;
+import com.apexarena.leaderboard.dto.LeaderboardResponse;
 import com.apexarena.leaderboard.service.LeaderboardService;
 
 import jakarta.validation.constraints.Max;
@@ -23,8 +22,15 @@ public class LeaderboardController {
         this.service = service;
     }
 
+    /**
+     * GET /api/leaderboard/top?n=10                   overall
+     * GET /api/leaderboard/top?n=10&difficulty=boss   one difficulty
+     * GET /api/leaderboard/top?n=10&monster=zapret    one monster
+     */
     @GetMapping("/top")
-    public List<LeaderboardEntry> top(@RequestParam(defaultValue = "10") @Min(1) @Max(100) int n) {
-        return service.top(n);
+    public LeaderboardResponse top(@RequestParam(defaultValue = "10") @Min(1) @Max(100) int n,
+                                   @RequestParam(required = false) String difficulty,
+                                   @RequestParam(required = false) String monster) {
+        return service.top(Board.from(difficulty, monster), n);
     }
 }
