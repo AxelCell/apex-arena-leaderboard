@@ -16,10 +16,11 @@ public record Score(
         int hpLeftPercent,
         double fightSeconds,
         int points,
-        Instant submittedAt
+        Instant submittedAt,
+        String fightId
 ) {
     public Score withId(Long newId) {
         return new Score(newId, playerName, monster, difficulty, mode, won, hpLeftPercent, fightSeconds,
-                points, submittedAt);
+                points, submittedAt, fightId);
     }
 }

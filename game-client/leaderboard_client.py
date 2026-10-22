@@ -6,7 +6,11 @@ so the game never freezes or crashes when the server is slow or down.
 Only the standard library is used (urllib), no extra pip install.
 
 Server address: set APEX_API_URL (default http://localhost:8080).
+Score submissions are signed with HMAC-SHA256 using APEX_API_SECRET, which must match
+the server's HMAC_SECRET.
 """
+import hashlib
+import hmac
 import json
 import os
 import threading
@@ -14,8 +18,10 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+import uuid
 
 API_URL = os.environ.get("APEX_API_URL", "http://localhost:8080").rstrip("/")
+API_SECRET = os.environ.get("APEX_API_SECRET", "dev-secret-change-me").encode("utf-8")
 TIMEOUT = 3.0
 NAME_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "player_name.txt")
 
@@ -43,13 +49,21 @@ def valid_name(name):
     return 3 <= len(name) <= 16 and all(c.isascii() and (c.isalnum() or c == "_") for c in name)
 
 
+def sign(timestamp, data):
+    """hex HMAC-SHA256 of b"<timestamp>.<body>" - the server checks the exact same bytes."""
+    return hmac.new(API_SECRET, timestamp.encode("ascii") + b"." + data, hashlib.sha256).hexdigest()
+
+
 def _request(method, path, body=None):
     """One HTTP call. Returns (status, parsed_json_or_None). Raises on network failure."""
-    data = json.dumps(body).encode("utf-8") if body is not None else None
+    data = json.dumps(body, separators=(",", ":")).encode("utf-8") if body is not None else None
     req = urllib.request.Request(API_URL + path, data=data, method=method)
     req.add_header("Accept", "application/json")
     if data is not None:
+        ts = str(int(time.time()))
         req.add_header("Content-Type", "application/json")
+        req.add_header("X-Timestamp", ts)
+        req.add_header("X-Signature", sign(ts, data))
     try:
         with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:
             raw = resp.read()
@@ -75,7 +89,8 @@ class Client:
     # ---- POST /api/scores
     def submit(self, player, monster, difficulty, mode, won, hp_pct, fight_seconds):
         body = dict(playerName=player, monster=monster, difficulty=difficulty, mode=mode,
-                    won=bool(won), hpLeftPercent=int(hp_pct), fightSeconds=round(float(fight_seconds), 2))
+                    won=bool(won), hpLeftPercent=int(hp_pct), fightSeconds=round(float(fight_seconds), 2),
+                    fightId=str(uuid.uuid4()))
         status = dict(state="sending")
         self.last_submit = status
         _background(self._submit, body, status)

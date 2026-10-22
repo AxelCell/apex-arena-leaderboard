@@ -56,6 +56,9 @@ public class ScoreEntity {
     @Column(name = "submitted_at", nullable = false)
     private Instant submittedAt;
 
+    @Column(name = "fight_id", length = 36, unique = true)
+    private String fightId;
+
     protected ScoreEntity() {
         // required by JPA
     }
@@ -72,11 +75,12 @@ public class ScoreEntity {
         e.fightSeconds = s.fightSeconds();
         e.points = s.points();
         e.submittedAt = s.submittedAt();
+        e.fightId = s.fightId();
         return e;
     }
 
     Score toDomain() {
         return new Score(id, playerName, monster, difficulty, mode, won, hpLeftPercent, fightSeconds, points,
-                submittedAt);
+                submittedAt, fightId);
     }
 }

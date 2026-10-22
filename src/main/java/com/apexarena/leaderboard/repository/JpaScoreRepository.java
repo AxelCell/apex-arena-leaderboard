@@ -23,7 +23,13 @@ public class JpaScoreRepository implements ScoreRepository {
 
     @Override
     public Score save(Score score) {
-        return jpa.save(ScoreEntity.from(score)).toDomain();
+        // saveAndFlush: run the INSERT now, so a duplicate fightId fails inside this call
+        return jpa.saveAndFlush(ScoreEntity.from(score)).toDomain();
+    }
+
+    @Override
+    public boolean existsByFightId(String fightId) {
+        return jpa.existsByFightId(fightId);
     }
 
     @Override

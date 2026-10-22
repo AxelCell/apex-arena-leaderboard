@@ -14,6 +14,8 @@ public interface ScoreRepository {
 
     Score save(Score score);
 
+    boolean existsByFightId(String fightId);
+
     /** Each player's single best score on the board, highest first, at most {@code limit} rows. */
     List<PlayerBest> topPlayers(Board board, int limit);
 

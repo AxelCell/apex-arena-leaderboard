@@ -18,6 +18,8 @@ interface SpringDataScoreRepository extends JpaRepository<ScoreEntity, Long> {
     String BOARD_FILTER = "(:difficulty is null or s.difficulty = :difficulty) "
             + "and (:monster is null or s.monster = :monster)";
 
+    boolean existsByFightId(String fightId);
+
     @Query("select new com.apexarena.leaderboard.repository.PlayerBest(s.playerName, max(s.points)) "
             + "from ScoreEntity s where " + BOARD_FILTER
             + " group by s.playerName order by max(s.points) desc, s.playerName asc")

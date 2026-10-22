@@ -9,6 +9,7 @@ import java.util.Locale;
 import java.util.Set;
 
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -22,6 +23,7 @@ import com.apexarena.leaderboard.dto.LeaderboardResponse;
 import com.apexarena.leaderboard.dto.PlayerRankResponse;
 import com.apexarena.leaderboard.dto.ScoreResponse;
 import com.apexarena.leaderboard.dto.SubmitScoreRequest;
+import com.apexarena.leaderboard.exception.DuplicateFightException;
 import com.apexarena.leaderboard.exception.InvalidScoreException;
 import com.apexarena.leaderboard.exception.PlayerNotFoundException;
 import com.apexarena.leaderboard.repository.PlayerBest;
@@ -32,17 +34,19 @@ public class LeaderboardService {
 
     private final ScoreRepository repository;
     private final ScoreCalculator calculator;
+    private final ScoreValidator validator;
     private final Set<String> monsters;
     private final Clock clock;
     private final LeaderboardCache cache;
     private final ApplicationEventPublisher events;
 
     // Constructor injection: Spring passes in the beans; fields stay final and testable.
-    public LeaderboardService(ScoreRepository repository, ScoreCalculator calculator,
+    public LeaderboardService(ScoreRepository repository, ScoreCalculator calculator, ScoreValidator validator,
                               GameProperties props, Clock clock, LeaderboardCache cache,
                               ApplicationEventPublisher events) {
         this.repository = repository;
         this.calculator = calculator;
+        this.validator = validator;
         this.monsters = props.monsterSet();
         this.clock = clock;
         this.cache = cache;
@@ -57,9 +61,19 @@ public class LeaderboardService {
         if (!monsters.contains(monster)) {
             throw new InvalidScoreException("Unknown monster '" + req.monster() + "'");
         }
+        validator.validate(req);
+        if (repository.existsByFightId(req.fightId())) {
+            throw new DuplicateFightException(req.fightId());
+        }
         int points = calculator.points(req.difficulty(), req.won(), req.hpLeftPercent(), req.fightSeconds());
-        Score score = repository.save(new Score(null, player, monster, req.difficulty(), req.mode(),
-                req.won(), req.hpLeftPercent(), req.fightSeconds(), points, Instant.now(clock)));
+        Score score;
+        try {
+            score = repository.save(new Score(null, player, monster, req.difficulty(), req.mode(),
+                    req.won(), req.hpLeftPercent(), req.fightSeconds(), points, Instant.now(clock), req.fightId()));
+        } catch (DataIntegrityViolationException e) {
+            // Two identical requests raced past existsByFightId; the unique index caught the second.
+            throw new DuplicateFightException(req.fightId());
+        }
         // The cache is updated by CacheUpdater after this transaction commits.
         events.publishEvent(new ScoreSubmittedEvent(score));
 
