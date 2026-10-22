@@ -94,7 +94,7 @@
      def key_help(self, k):
          if k in OK or k in BACK:
              self.title()
-@@ -1671,10 +1713,25 @@
+@@ -1671,10 +1713,24 @@
              w = self.world
              w.update(dt, [None if f.ai else self.intent(f.ctrl) for f in w.f])
              if w.phase == "done":
@@ -106,7 +106,6 @@
                      self.start_watch()
  
 +    def report(self, w):
-+        """Send the result to the leaderboard service (non-blocking)."""
 +        self.net.last_submit = None
 +        if self.mode not in ("quick", "league") or not self.player:
 +            return
@@ -120,7 +119,7 @@
      # --- drawing
      def draw(self):
          getattr(self, "draw_" + self.state)()
-@@ -1705,12 +1762,60 @@
+@@ -1705,12 +1761,60 @@
              y = 300 + (i // 2) * 170 + math.sin(self.t * 2 + i) * 6
              s.blit(img, (x - img.get_width() // 2, y - img.get_height() // 2))
          for i, it in enumerate(TITLE_ITEMS):
@@ -158,7 +157,7 @@
 +            panel(s, (x - 76, 104, 152, 38), GOLD if on else (20, 20, 44), 235, 10, WHITE if on else (90, 90, 130), 2)
 +            txt(s, label, F["s"], INK if on else WHITE, x, 123, ol=0 if on else 1)
 +        label = lb.BOARDS[self.board_i][0]
-+        self.net.fetch_board(label, self.player)   # no-op unless the data is stale (>10s)
++        self.net.fetch_board(label, self.player)
 +        b = self.net.boards.get(label) or dict(state="loading", entries=[], me=None)
 +        panel(s, (SW // 2 - 330, 158, 660, 452), (12, 12, 30), 225, 14, (90, 90, 130), 2)
 +        if b["state"] == "error" and not b["entries"]:
@@ -183,7 +182,7 @@
  
      def draw_help(self):
          s = self.screen
-@@ -2000,6 +2105,15 @@
+@@ -2000,6 +2104,15 @@
          a, b = w.f
          txt(s, "Damage dealt      %s %d      %s %d" % (a.name, a.dealt, b.name, b.dealt), F["s"], WHITE, SW // 2, 436)
          txt(s, "Best combo      %s %d      %s %d" % (a.name, a.maxcombo, b.name, b.maxcombo), F["s"], WHITE, SW // 2, 462)

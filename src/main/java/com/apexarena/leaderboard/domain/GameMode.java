@@ -5,7 +5,6 @@ import java.util.Locale;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonValue;
 
-/** Only single-player modes against the AI are ranked (not 2P Versus or Watch). */
 public enum GameMode {
     QUICK,
     LEAGUE;

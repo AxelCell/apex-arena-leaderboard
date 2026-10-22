@@ -42,7 +42,6 @@ import com.apexarena.leaderboard.repository.ScoreRepository;
 
 @ExtendWith(MockitoExtension.class)
 class LeaderboardServiceTest {
-
     private static final Instant NOW = Instant.parse("2026-10-22T10:00:00Z");
 
     @Mock ScoreRepository repository;
@@ -72,9 +71,9 @@ class LeaderboardServiceTest {
 
         ArgumentCaptor<Score> saved = ArgumentCaptor.forClass(Score.class);
         verify(repository).save(saved.capture());
-        assertThat(saved.getValue().playerName()).isEqualTo("aish");     // names are normalized
+        assertThat(saved.getValue().playerName()).isEqualTo("aish");
         assertThat(saved.getValue().monster()).isEqualTo("zapret");
-        assertThat(saved.getValue().points()).isEqualTo(537);           // computed by the server
+        assertThat(saved.getValue().points()).isEqualTo(537);
         assertThat(saved.getValue().submittedAt()).isEqualTo(NOW);
         verify(events).publishEvent(new ScoreSubmittedEvent(saved.getValue().withId(42L)));
         assertThat(res.id()).isEqualTo(42L);
@@ -122,9 +121,9 @@ class LeaderboardServiceTest {
 
         assertThat(res.entries()).extracting("rank", "playerName")
                 .containsExactly(
-                        org.assertj.core.groups.Tuple.tuple(1, "amy"),   // ties sorted by name
+                        org.assertj.core.groups.Tuple.tuple(1, "amy"),
                         org.assertj.core.groups.Tuple.tuple(1, "zed"),
-                        org.assertj.core.groups.Tuple.tuple(3, "bob"),   // competition ranking: 1, 1, 3
+                        org.assertj.core.groups.Tuple.tuple(3, "bob"),
                         org.assertj.core.groups.Tuple.tuple(4, "cat"));
         verify(repository, never()).topPlayers(any(), anyInt());
     }

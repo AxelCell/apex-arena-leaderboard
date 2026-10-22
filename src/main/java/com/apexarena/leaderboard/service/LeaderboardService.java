@@ -31,7 +31,6 @@ import com.apexarena.leaderboard.repository.ScoreRepository;
 
 @Service
 public class LeaderboardService {
-
     private final ScoreRepository repository;
     private final ScoreCalculator calculator;
     private final ScoreValidator validator;
@@ -40,7 +39,6 @@ public class LeaderboardService {
     private final LeaderboardCache cache;
     private final ApplicationEventPublisher events;
 
-    // Constructor injection: Spring passes in the beans; fields stay final and testable.
     public LeaderboardService(ScoreRepository repository, ScoreCalculator calculator, ScoreValidator validator,
                               GameProperties props, Clock clock, LeaderboardCache cache,
                               ApplicationEventPublisher events) {
@@ -55,7 +53,6 @@ public class LeaderboardService {
 
     @Transactional
     public ScoreResponse submit(SubmitScoreRequest req) {
-        // Names are case-insensitive identities ("Aish" and "aish" are one player).
         String player = normalizeName(req.playerName());
         String monster = req.monster().trim().toLowerCase(Locale.ROOT);
         if (!monsters.contains(monster)) {
@@ -71,27 +68,22 @@ public class LeaderboardService {
             score = repository.save(new Score(null, player, monster, req.difficulty(), req.mode(),
                     req.won(), req.hpLeftPercent(), req.fightSeconds(), points, Instant.now(clock), req.fightId()));
         } catch (DataIntegrityViolationException e) {
-            // Two identical requests raced past existsByFightId; the unique index caught the second.
             throw new DuplicateFightException(req.fightId());
         }
-        // The cache is updated by CacheUpdater after this transaction commits.
         events.publishEvent(new ScoreSubmittedEvent(score));
 
-        // Rank from the database, inside this transaction, so it already includes the new score.
         PlayerRankResponse rank = rankFromDatabase(player, Board.overall());
         return ScoreResponse.from(score, rank.bestPoints(), rank.rank());
     }
 
     public LeaderboardResponse top(Board board, int n) {
         List<PlayerBest> rows = cache.top(board, n)
-                // Redis orders equal scores by name descending; use the same order as SQL.
                 .map(list -> list.stream().sorted(Comparator.comparingInt(PlayerBest::points).reversed()
                         .thenComparing(PlayerBest::playerName)).toList())
                 .orElseGet(() -> repository.topPlayers(board, n));
         List<LeaderboardEntry> entries = new ArrayList<>(rows.size());
         int rank = 0;
         for (int i = 0; i < rows.size(); i++) {
-            // Standard competition ranking: equal points share a rank (1, 2, 2, 4).
             if (i == 0 || rows.get(i).points() != rows.get(i - 1).points()) {
                 rank = i + 1;
             }

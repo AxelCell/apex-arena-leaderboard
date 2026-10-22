@@ -1,11 +1,10 @@
 package com.apexarena.leaderboard.controller;
 
-import java.net.URI;
-
-import org.springframework.http.ResponseEntity;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.apexarena.leaderboard.dto.ScoreResponse;
@@ -17,7 +16,6 @@ import jakarta.validation.Valid;
 @RestController
 @RequestMapping("/api/scores")
 public class ScoreController {
-
     private final LeaderboardService service;
 
     public ScoreController(LeaderboardService service) {
@@ -25,8 +23,8 @@ public class ScoreController {
     }
 
     @PostMapping
-    public ResponseEntity<ScoreResponse> submit(@Valid @RequestBody SubmitScoreRequest req) {
-        ScoreResponse saved = service.submit(req);
-        return ResponseEntity.created(URI.create("/api/scores/" + saved.id())).body(saved);
+    @ResponseStatus(HttpStatus.CREATED)
+    public ScoreResponse submit(@Valid @RequestBody SubmitScoreRequest req) {
+        return service.submit(req);
     }
 }

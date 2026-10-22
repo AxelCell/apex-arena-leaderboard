@@ -15,18 +15,12 @@ import jakarta.validation.constraints.Min;
 @RestController
 @RequestMapping("/api/leaderboard")
 public class LeaderboardController {
-
     private final LeaderboardService service;
 
     public LeaderboardController(LeaderboardService service) {
         this.service = service;
     }
 
-    /**
-     * GET /api/leaderboard/top?n=10                   overall
-     * GET /api/leaderboard/top?n=10&difficulty=boss   one difficulty
-     * GET /api/leaderboard/top?n=10&monster=zapret    one monster
-     */
     @GetMapping("/top")
     public LeaderboardResponse top(@RequestParam(defaultValue = "10") @Min(1) @Max(100) int n,
                                    @RequestParam(required = false) String difficulty,

@@ -9,7 +9,6 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 @ConfigurationPropertiesScan
 @EnableScheduling
 public class LeaderboardApplication {
-
 	public static void main(String[] args) {
 		SpringApplication.run(LeaderboardApplication.class, args);
 	}

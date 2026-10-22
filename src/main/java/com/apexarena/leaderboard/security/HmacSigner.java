@@ -8,12 +8,7 @@ import java.util.HexFormat;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 
-/**
- * HMAC-SHA256 over {@code "<timestamp>.<raw body>"}, hex encoded.
- * Same scheme the game client uses (see game-client/leaderboard_client.py).
- */
 public final class HmacSigner {
-
     private static final String ALGORITHM = "HmacSHA256";
     private final SecretKeySpec key;
 
@@ -26,7 +21,7 @@ public final class HmacSigner {
 
     public String sign(String timestamp, byte[] body) {
         try {
-            Mac mac = Mac.getInstance(ALGORITHM);   // Mac is not thread-safe: one per call
+            Mac mac = Mac.getInstance(ALGORITHM);
             mac.init(key);
             mac.update(timestamp.getBytes(StandardCharsets.UTF_8));
             mac.update((byte) '.');
@@ -37,7 +32,6 @@ public final class HmacSigner {
         }
     }
 
-    /** Constant-time comparison so an attacker cannot learn the signature byte by byte from timing. */
     public boolean verify(String timestamp, byte[] body, String signatureHex) {
         if (signatureHex == null) {
             return false;

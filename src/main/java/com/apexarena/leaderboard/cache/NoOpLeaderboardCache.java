@@ -10,11 +10,9 @@ import com.apexarena.leaderboard.domain.Board;
 import com.apexarena.leaderboard.domain.Score;
 import com.apexarena.leaderboard.repository.PlayerBest;
 
-/** Used when leaderboard.cache.enabled=false: every read goes straight to the database. */
 @Component
 @ConditionalOnProperty(name = "leaderboard.cache.enabled", havingValue = "false")
 public class NoOpLeaderboardCache implements LeaderboardCache {
-
     @Override
     public Optional<List<PlayerBest>> top(Board board, int n) {
         return Optional.empty();
@@ -27,6 +25,5 @@ public class NoOpLeaderboardCache implements LeaderboardCache {
 
     @Override
     public void record(Score score) {
-        // nothing to do
     }
 }

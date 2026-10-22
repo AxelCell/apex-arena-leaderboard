@@ -4,12 +4,7 @@ import java.io.IOException;
 
 import jakarta.servlet.http.HttpServletResponse;
 
-/**
- * Filters run before Spring MVC, so @RestControllerAdvice cannot format their errors.
- * This writes the same problem+json shape by hand.
- */
 final class Problems {
-
     private Problems() {
     }
 

@@ -13,19 +13,9 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 
-/**
- * Verifies that a score submission was signed with the shared secret:
- * <pre>
- *   X-Timestamp: 1761130000                      (unix seconds)
- *   X-Signature: hex(HMAC-SHA256(secret, "1761130000." + rawBody))
- * </pre>
- * The timestamp is inside the signature, so it cannot be changed, and requests older than
- * {@code max-skew} are rejected. Together with the unique fightId this stops replays.
- */
 @Component
 @Order(2)
 public class SignatureFilter extends OncePerRequestFilter {
-
     static final String TIMESTAMP_HEADER = "X-Timestamp";
     static final String SIGNATURE_HEADER = "X-Signature";
     private static final int MAX_BODY_BYTES = 8 * 1024;
@@ -45,13 +35,14 @@ public class SignatureFilter extends OncePerRequestFilter {
         this.clock = clock;
     }
 
-    static boolean isScoreSubmission(HttpServletRequest req) {
-        return "POST".equals(req.getMethod()) && "/api/scores".equals(req.getRequestURI());
+    static boolean isWrite(HttpServletRequest req) {
+        String m = req.getMethod();
+        return !("GET".equals(m) || "HEAD".equals(m) || "OPTIONS".equals(m));
     }
 
     @Override
     protected boolean shouldNotFilter(HttpServletRequest req) {
-        return !enabled || !isScoreSubmission(req);
+        return !enabled || !isWrite(req);
     }
 
     @Override

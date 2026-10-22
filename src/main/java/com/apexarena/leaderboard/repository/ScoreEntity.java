@@ -15,14 +15,9 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 
-/**
- * JPA mapping of the {@code scores} table (schema is owned by Flyway, see db/migration).
- * Kept separate from the domain {@link Score} record so persistence details don't leak.
- */
 @Entity
 @Table(name = "scores")
 public class ScoreEntity {
-
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -60,7 +55,6 @@ public class ScoreEntity {
     private String fightId;
 
     protected ScoreEntity() {
-        // required by JPA
     }
 
     static ScoreEntity from(Score s) {

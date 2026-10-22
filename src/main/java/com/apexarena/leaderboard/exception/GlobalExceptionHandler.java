@@ -15,14 +15,8 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.context.request.WebRequest;
 import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler;
 
-/**
- * Turns exceptions into consistent RFC 9457 "problem+json" responses.
- * The base class already maps Spring's own exceptions (bad JSON, bad params, 404, 405...).
- */
 @RestControllerAdvice
 public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
-
-    /** Body failed @Valid: list every bad field so the client can show it. */
     @Override
     protected ResponseEntity<Object> handleMethodArgumentNotValid(
             MethodArgumentNotValidException ex, HttpHeaders headers, HttpStatusCode status, WebRequest request) {
@@ -43,7 +37,6 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         return pd;
     }
 
-    /** 422: the JSON is valid but the fight it describes is not possible. */
     @ExceptionHandler(InvalidScoreException.class)
     public ProblemDetail handleInvalidScore(InvalidScoreException ex) {
         ProblemDetail pd = ProblemDetail.forStatusAndDetail(HttpStatus.UNPROCESSABLE_CONTENT, ex.getMessage());

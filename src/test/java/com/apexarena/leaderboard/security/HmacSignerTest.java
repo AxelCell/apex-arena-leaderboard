@@ -8,11 +8,9 @@ import java.nio.charset.StandardCharsets;
 import org.junit.jupiter.api.Test;
 
 class HmacSignerTest {
-
     private final HmacSigner signer = new HmacSigner("test-secret");
     private final byte[] body = "{\"a\":1}".getBytes(StandardCharsets.UTF_8);
 
-    /** Same value Python's hmac.new(b"test-secret", b'1700000000.{"a":1}', sha256) produces. */
     private static final String PYTHON_VECTOR = "8cb2c3355fca388e9ac2caec004f4d5d7045d74937ab5faad61dc11682247a9f";
 
     @Test

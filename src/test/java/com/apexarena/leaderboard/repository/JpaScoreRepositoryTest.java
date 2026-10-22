@@ -20,14 +20,11 @@ import com.apexarena.leaderboard.domain.Difficulty;
 import com.apexarena.leaderboard.domain.GameMode;
 import com.apexarena.leaderboard.domain.Score;
 
-/** Runs the real SQL against H2 (MySQL mode, from the test profile) with the real Flyway schema. */
-// Own in-memory database so data committed by other test classes cannot leak in.
 @DataJpaTest(properties = "spring.datasource.url=jdbc:h2:mem:repotest;MODE=MySQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1")
-@AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)   // keep MODE=MySQL
+@AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 @ActiveProfiles("test")
 @Import(JpaScoreRepository.class)
 class JpaScoreRepositoryTest {
-
     @Autowired JpaScoreRepository repo;
 
     private static Score score(String player, String monster, Difficulty d, int points) {
@@ -67,7 +64,7 @@ class JpaScoreRepositoryTest {
     void bestPointsAndRankCounts() {
         assertThat(repo.bestPoints(Board.overall(), "bob")).contains(650);
         assertThat(repo.bestPoints(Board.of(Difficulty.BOSS), "bob")).isEmpty();
-        assertThat(repo.countPlayersAbove(Board.overall(), 650)).isEqualTo(1);   // only aish
+        assertThat(repo.countPlayersAbove(Board.overall(), 650)).isEqualTo(1);
         assertThat(repo.countPlayersAbove(Board.overall(), 100)).isEqualTo(3);
         assertThat(repo.countPlayers(Board.overall())).isEqualTo(3);
         assertThat(repo.countPlayers(Board.ofMonster("golmoss"))).isEqualTo(2);

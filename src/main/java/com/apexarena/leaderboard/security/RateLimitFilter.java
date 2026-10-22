@@ -15,18 +15,9 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 
-/**
- * Limits score submissions per client IP with a token bucket. A real fight takes well over
- * ten seconds, so a human never comes close to the default limit (burst 10, 20 per minute).
- *
- * <p>Runs first (before HMAC) so a flood is rejected without spending CPU on crypto.
- * In-memory, so the limit is per app instance; with several instances this would move
- * to Redis (INCR + EXPIRE per window). Behind a proxy, use the X-Forwarded-For client IP.
- */
 @Component
 @Order(1)
 public class RateLimitFilter extends OncePerRequestFilter {
-
     private final boolean enabled;
     private final int capacity;
     private final double refillPerSecond;
@@ -42,7 +33,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
 
     @Override
     protected boolean shouldNotFilter(HttpServletRequest req) {
-        return !enabled || !SignatureFilter.isScoreSubmission(req);
+        return !enabled || !SignatureFilter.isWrite(req);
     }
 
     @Override
@@ -61,7 +52,6 @@ public class RateLimitFilter extends OncePerRequestFilter {
         chain.doFilter(req, res);
     }
 
-    /** Forget clients whose bucket has refilled, so the map does not grow forever. */
     @Scheduled(fixedDelayString = "${leaderboard.rate-limit.cleanup-interval:5m}")
     void evictIdle() {
         long now = System.nanoTime();

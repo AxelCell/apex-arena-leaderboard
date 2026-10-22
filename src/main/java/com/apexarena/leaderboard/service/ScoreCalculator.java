@@ -5,19 +5,8 @@ import org.springframework.stereotype.Component;
 import com.apexarena.leaderboard.config.GameProperties;
 import com.apexarena.leaderboard.domain.Difficulty;
 
-/**
- * The scoring rules, kept in one pure class so they are easy to unit test and tune.
- *
- * <pre>
- *   loss:  base / 10                       (a little credit for trying)
- *   win:   base                            easy 100, hard 250, boss 500
- *        + base * hpLeft%                  up to +100% for a flawless win
- *        + base * 0.5 * timeLeft / length  up to +50% for a fast win
- * </pre>
- */
 @Component
 public class ScoreCalculator {
-
     private final int fightLength;
 
     public ScoreCalculator(GameProperties props) {

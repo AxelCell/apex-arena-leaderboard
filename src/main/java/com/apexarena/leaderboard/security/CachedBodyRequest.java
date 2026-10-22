@@ -10,12 +10,7 @@ import jakarta.servlet.ServletInputStream;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletRequestWrapper;
 
-/**
- * A request body can only be read once. The signature filter needs the raw bytes AND the
- * controller still needs to parse them, so we read them once and replay them from memory.
- */
 class CachedBodyRequest extends HttpServletRequestWrapper {
-
     private final byte[] body;
 
     CachedBodyRequest(HttpServletRequest request, byte[] body) {

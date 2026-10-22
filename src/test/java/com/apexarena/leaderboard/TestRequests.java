@@ -11,9 +11,7 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
 
 import com.apexarena.leaderboard.security.HmacSigner;
 
-/** Builds signed POST /api/scores requests the same way the game does. */
 public final class TestRequests {
-
     public static final String SECRET = "test-secret";
     private static final HmacSigner SIGNER = new HmacSigner(SECRET);
 

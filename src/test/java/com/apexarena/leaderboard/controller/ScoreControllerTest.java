@@ -8,7 +8,6 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -33,26 +32,20 @@ import com.apexarena.leaderboard.dto.ScoreResponse;
 import com.apexarena.leaderboard.exception.PlayerNotFoundException;
 import com.apexarena.leaderboard.service.LeaderboardService;
 
-/**
- * Web layer only: controllers, validation, exception handler and the security filters.
- * The service is a Mockito mock, so no database is involved.
- */
 @WebMvcTest(controllers = { ScoreController.class, LeaderboardController.class, PlayerController.class })
 @Import(ClockConfig.class)
 @ActiveProfiles("test")
 class ScoreControllerTest {
-
     @Autowired MockMvc mvc;
     @MockitoBean LeaderboardService service;
 
     @Test
-    void validSignedSubmissionReturns201WithLocation() throws Exception {
+    void validSignedSubmissionReturns201() throws Exception {
         when(service.submit(any())).thenReturn(new ScoreResponse(7L, "aish", "zapret", Difficulty.HARD, true,
                 537, 537, 1, Instant.now()));
 
         mvc.perform(signedPost(fightJson("aish", "zapret", "hard", true, 80, 30)))
                 .andExpect(status().isCreated())
-                .andExpect(header().string("Location", "/api/scores/7"))
                 .andExpect(jsonPath("$.points").value(537))
                 .andExpect(jsonPath("$.difficulty").value("hard"));
     }
@@ -82,6 +75,14 @@ class ScoreControllerTest {
                         .content(fightJson("aish", "zapret", "hard", true, 80, 30)))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.detail").value("Missing X-Timestamp or X-Signature header"));
+        verify(service, never()).submit(any());
+    }
+
+    @Test
+    void pathParametersCannotBypassTheSignatureCheck() throws Exception {
+        mvc.perform(post("/api/scores;x=1").contentType(MediaType.APPLICATION_JSON)
+                        .content(fightJson("aish", "zapret", "hard", true, 80, 30)))
+                .andExpect(status().isUnauthorized());
         verify(service, never()).submit(any());
     }
 

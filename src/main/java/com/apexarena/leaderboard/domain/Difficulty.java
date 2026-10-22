@@ -5,7 +5,6 @@ import java.util.Locale;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonValue;
 
-/** AI difficulty in Apex Arena. Each one carries the base points for a win. */
 public enum Difficulty {
     EASY(100),
     HARD(250),
@@ -21,7 +20,6 @@ public enum Difficulty {
         return basePoints;
     }
 
-    /** The game uses lowercase names ("easy", "hard", "boss"), so JSON does too. */
     @JsonValue
     public String key() {
         return name().toLowerCase(Locale.ROOT);

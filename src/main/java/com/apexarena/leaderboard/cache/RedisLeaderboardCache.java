@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.ReentrantLock;
@@ -19,6 +20,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.data.redis.connection.RedisZSetCommands.ZAddArgs;
+import org.springframework.data.redis.connection.zset.Aggregate;
 import org.springframework.data.redis.connection.zset.DefaultTuple;
 import org.springframework.data.redis.connection.zset.Tuple;
 import org.springframework.data.redis.core.Cursor;
@@ -33,36 +35,16 @@ import com.apexarena.leaderboard.domain.Score;
 import com.apexarena.leaderboard.repository.PlayerBest;
 import com.apexarena.leaderboard.repository.ScoreRepository;
 
-/**
- * Leaderboards as Redis sorted sets: one ZSET per board, member = player, score = best points.
- *
- * <ul>
- *   <li><b>Write-through:</b> after a score is committed, {@code ZADD key GT points player}
- *       updates each of its boards. GT keeps the higher value, so updates can arrive in any
- *       order (or twice) and the result is still each player's maximum.</li>
- *   <li><b>Lazy load (cache-aside):</b> a board is loaded from MySQL the first time it is read.
- *       A sentinel member marks the set as complete; until it is present, readers use MySQL.
- *       Because loading also uses ZADD GT, a write racing with a load is never lost.</li>
- *   <li><b>TTL:</b> complete boards expire after {@code leaderboard.cache.ttl} and are reloaded,
- *       which heals any drift (e.g. writes missed while Redis was down).</li>
- *   <li><b>Fail-open:</b> on any Redis error we skip Redis for a few seconds (a tiny circuit
- *       breaker) and answer from MySQL, so a Redis outage only costs speed.</li>
- *   <li><b>Recovery:</b> if a write could not reach Redis, the cache is marked stale and all
- *       boards are deleted on the next successful call, so they reload from MySQL instead of
- *       serving a board that is missing that score.</li>
- * </ul>
- */
 @Component
 @ConditionalOnProperty(name = "leaderboard.cache.enabled", havingValue = "true", matchIfMissing = true)
 public class RedisLeaderboardCache implements LeaderboardCache {
-
     private static final Logger log = LoggerFactory.getLogger(RedisLeaderboardCache.class);
 
     static final String KEY_PREFIX = "lb:";
-    /** Marks a fully loaded board. Score -1 sorts it below every real player (points >= 0). */
     static final String SENTINEL = "\u0000complete";
 
     private static final int LOAD_BATCH = 1000;
+    private static final String LOAD_PREFIX = "lbload:";
 
     private final StringRedisTemplate redis;
     private final ScoreRepository repository;
@@ -95,7 +77,6 @@ public class RedisLeaderboardCache implements LeaderboardCache {
             if (!ensureLoaded(board)) {
                 return null;
             }
-            // ZREVRANGE key 0 n-1 WITHSCORES  (highest first)
             Set<TypedTuple<String>> tuples = redis.opsForZSet().reverseRangeWithScores(key, 0, n - 1);
             List<PlayerBest> out = new ArrayList<>();
             if (tuples != null) {
@@ -116,13 +97,12 @@ public class RedisLeaderboardCache implements LeaderboardCache {
             if (!ensureLoaded(board)) {
                 return null;
             }
-            Double best = redis.opsForZSet().score(key, playerName);           // ZSCORE
-            Long size = redis.opsForZSet().zCard(key);                          // ZCARD
-            long total = size == null ? 0 : Math.max(0, size - 1);              // minus sentinel
+            Double best = redis.opsForZSet().score(key, playerName);
+            Long size = redis.opsForZSet().zCard(key);
+            long total = size == null ? 0 : Math.max(0, size - 1);
             if (best == null) {
                 return new CachedRank(null, 0, total);
             }
-            // ZCOUNT key (best +inf  -> players strictly above (points are integers)
             Long above = redis.opsForZSet().count(key, best + 1, Double.POSITIVE_INFINITY);
             return new CachedRank(best.intValue(), above == null ? 0 : above, total);
         });
@@ -133,7 +113,6 @@ public class RedisLeaderboardCache implements LeaderboardCache {
         guarded(() -> {
             byte[] member = bytes(score.playerName());
             ZAddArgs gt = ZAddArgs.empty().gt();
-            // One round trip for all three boards.
             redis.executePipelined((RedisCallback<Object>) conn -> {
                 for (Board b : Board.boardsFor(score)) {
                     conn.zSetCommands().zAdd(bytes(key(b)), score.points(), member, gt);
@@ -144,14 +123,11 @@ public class RedisLeaderboardCache implements LeaderboardCache {
         }).ifPresentOrElse(ok -> { }, () -> stale.set(true));
     }
 
-    /** True when the board's ZSET is complete; loads it from the database if needed. */
     private boolean ensureLoaded(Board board) {
         String key = key(board);
         if (redis.opsForZSet().score(key, SENTINEL) != null) {
-            return true;                                                    // cache hit
+            return true;
         }
-        // Cache miss. Only one thread per board loads; the others use MySQL meanwhile
-        // instead of all hammering the database with the same query (cache stampede).
         ReentrantLock lock = loadLocks.computeIfAbsent(key, k -> new ReentrantLock());
         if (!lock.tryLock()) {
             return false;
@@ -161,30 +137,30 @@ public class RedisLeaderboardCache implements LeaderboardCache {
                 return true;
             }
             List<PlayerBest> all = repository.allPlayers(board);
-            ZAddArgs gt = ZAddArgs.empty().gt();
-            byte[] k = bytes(key);
-            // Variadic ZADD in batches (ZADD key GT s1 m1 s2 m2 ...): 20k players = 20 commands,
-            // not 20k. One command per player overran the Redis timeout under load (found by k6).
+            String tmp = LOAD_PREFIX + key + ":" + UUID.randomUUID();
+            byte[] t = bytes(tmp);
             redis.execute((RedisCallback<Object>) conn -> {
                 for (int i = 0; i < all.size(); i += LOAD_BATCH) {
                     Set<Tuple> batch = new HashSet<>();
                     for (PlayerBest p : all.subList(i, Math.min(all.size(), i + LOAD_BATCH))) {
                         batch.add(new DefaultTuple(bytes(p.playerName()), (double) p.points()));
                     }
-                    conn.zSetCommands().zAdd(k, batch, gt);
+                    conn.zSetCommands().zAdd(t, batch, ZAddArgs.empty());
                 }
-                conn.zSetCommands().zAdd(k, -1, bytes(SENTINEL));
-                conn.keyCommands().expire(k, ttl.toSeconds());
+                conn.zSetCommands().zAdd(t, -1, bytes(SENTINEL));
+                conn.keyCommands().expire(t, 60);
                 return null;
             });
+            redis.opsForZSet().unionAndStore(key, List.of(tmp), key, Aggregate.MAX);
+            redis.expire(key, ttl);
+            redis.delete(tmp);
             log.info("Loaded leaderboard {} into Redis ({} players)", key, all.size());
-            return true;
+            return redis.opsForZSet().score(key, SENTINEL) != null;
         } finally {
             lock.unlock();
         }
     }
 
-    /** Runs a Redis action; on failure opens the breaker and returns empty (= use the database). */
     private <T> Optional<T> guarded(Supplier<T> action) {
         long now = clock.millis();
         if (now < skipRedisUntilMillis) {

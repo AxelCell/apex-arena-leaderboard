@@ -1,5 +1,3 @@
-# Full stack:            docker compose up -d --build
-# Only MySQL + Redis:    docker compose up -d mysql redis   (then run the app from the IDE)
 services:
   app:
     build: .
@@ -19,7 +17,6 @@ services:
       redis:
         condition: service_healthy
     restart: unless-stopped
-    # The JRE image has no curl, so speak HTTP over bash's /dev/tcp.
     healthcheck:
       test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8080 && printf 'GET /actuator/health HTTP/1.0\\r\\n\\r\\n' >&3 && grep -q '\"status\":\"UP\"' <&3"]
       interval: 3s
@@ -46,7 +43,6 @@ services:
 
   redis:
     image: redis:7.4-alpine
-    # Pure cache: no snapshots, so a restart starts empty and reloads from MySQL.
     command: ["redis-server", "--save", "", "--appendonly", "no"]
     ports:
       - "6379:6379"

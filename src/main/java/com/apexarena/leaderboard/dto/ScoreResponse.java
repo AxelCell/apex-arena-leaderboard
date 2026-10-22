@@ -5,7 +5,6 @@ import java.time.Instant;
 import com.apexarena.leaderboard.domain.Difficulty;
 import com.apexarena.leaderboard.domain.Score;
 
-/** What the game gets back after submitting: the points earned and the new overall rank. */
 public record ScoreResponse(
         Long id,
         String playerName,

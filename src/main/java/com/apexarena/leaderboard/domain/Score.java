@@ -2,10 +2,6 @@ package com.apexarena.leaderboard.domain;
 
 import java.time.Instant;
 
-/**
- * One finished fight. Immutable: a score is never edited after it is recorded.
- * {@code id} is null until the database assigns one.
- */
 public record Score(
         Long id,
         String playerName,

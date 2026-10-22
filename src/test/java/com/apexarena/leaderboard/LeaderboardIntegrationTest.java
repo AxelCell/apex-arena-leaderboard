@@ -15,15 +15,10 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 
-/**
- * The whole app (filters, controllers, service, JPA, Flyway) against in-memory H2.
- * Uses unique player names per test so tests do not depend on each other's data.
- */
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
 class LeaderboardIntegrationTest {
-
     @Autowired MockMvc mvc;
 
     private static String uniqueName() {
@@ -39,10 +34,10 @@ class LeaderboardIntegrationTest {
                 .andExpect(jsonPath("$.points").value(936));
         mvc.perform(signedPost(fightJson(b, "oraclyx", "boss", true, 10, 90)))
                 .andExpect(status().isCreated());
-        mvc.perform(signedPost(fightJson(a, "oraclyx", "boss", false, 0, 50)))   // a worse result
+        mvc.perform(signedPost(fightJson(a, "oraclyx", "boss", false, 0, 50)))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.points").value(50))
-                .andExpect(jsonPath("$.bestPoints").value(936));                 // best is kept
+                .andExpect(jsonPath("$.bestPoints").value(936));
 
         mvc.perform(get("/api/players/" + a + "/rank").param("monster", "oraclyx"))
                 .andExpect(status().isOk())

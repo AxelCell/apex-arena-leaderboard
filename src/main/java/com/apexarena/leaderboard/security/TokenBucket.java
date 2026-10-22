@@ -1,12 +1,6 @@
 package com.apexarena.leaderboard.security;
 
-/**
- * Classic token bucket: holds up to {@code capacity} tokens, refills continuously at
- * {@code refillPerSecond}. Each request takes one token; no token means "too many requests".
- * Allows short bursts (up to capacity) while capping the long-run rate.
- */
 public class TokenBucket {
-
     private final double capacity;
     private final double refillPerNano;
     private double tokens;
@@ -19,7 +13,6 @@ public class TokenBucket {
         this.lastRefillNanos = nowNanos;
     }
 
-    /** @return 0 if a token was taken, otherwise how many seconds until one is available */
     public synchronized long tryConsume(long nowNanos) {
         refill(nowNanos);
         if (tokens >= 1) {
@@ -29,7 +22,6 @@ public class TokenBucket {
         return (long) Math.ceil((1 - tokens) / refillPerNano / 1_000_000_000.0);
     }
 
-    /** True when the bucket is full again, i.e. the client has been idle; safe to forget it. */
     public synchronized boolean isFull(long nowNanos) {
         refill(nowNanos);
         return tokens >= capacity;

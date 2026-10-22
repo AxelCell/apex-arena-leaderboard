@@ -6,13 +6,8 @@ import org.springframework.stereotype.Component;
 import com.apexarena.leaderboard.dto.SubmitScoreRequest;
 import com.apexarena.leaderboard.exception.InvalidScoreException;
 
-/**
- * Server-side sanity checks on a fight result. Bean Validation already checked ranges;
- * these rules check that the combination of values could really happen in the game.
- */
 @Component
 public class ScoreValidator {
-
     private final double minWinSeconds;
 
     public ScoreValidator(@Value("${leaderboard.anticheat.min-win-seconds:3}") double minWinSeconds) {

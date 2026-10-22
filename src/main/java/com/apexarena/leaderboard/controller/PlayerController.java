@@ -13,14 +13,12 @@ import com.apexarena.leaderboard.service.LeaderboardService;
 @RestController
 @RequestMapping("/api/players")
 public class PlayerController {
-
     private final LeaderboardService service;
 
     public PlayerController(LeaderboardService service) {
         this.service = service;
     }
 
-    /** GET /api/players/{name}/rank, optionally ?difficulty=hard or ?monster=zapret */
     @GetMapping("/{name}/rank")
     public PlayerRankResponse rank(@PathVariable String name,
                                    @RequestParam(required = false) String difficulty,

@@ -1,14 +1,3 @@
-"""
-Talks to the Apex Arena leaderboard service (a Spring Boot app).
-
-Everything here runs on background daemon threads and swallows network errors,
-so the game never freezes or crashes when the server is slow or down.
-Only the standard library is used (urllib), no extra pip install.
-
-Server address: set APEX_API_URL (default http://localhost:8080).
-Score submissions are signed with HMAC-SHA256 using APEX_API_SECRET, which must match
-the server's HMAC_SECRET.
-"""
 import hashlib
 import hmac
 import json
@@ -50,12 +39,10 @@ def valid_name(name):
 
 
 def sign(timestamp, data):
-    """hex HMAC-SHA256 of b"<timestamp>.<body>" - the server checks the exact same bytes."""
     return hmac.new(API_SECRET, timestamp.encode("ascii") + b"." + data, hashlib.sha256).hexdigest()
 
 
 def _request(method, path, body=None):
-    """One HTTP call. Returns (status, parsed_json_or_None). Raises on network failure."""
     data = json.dumps(body, separators=(",", ":")).encode("utf-8") if body is not None else None
     req = urllib.request.Request(API_URL + path, data=data, method=method)
     req.add_header("Accept", "application/json")
@@ -68,7 +55,7 @@ def _request(method, path, body=None):
         with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:
             raw = resp.read()
             return resp.status, (json.loads(raw) if raw else None)
-    except urllib.error.HTTPError as e:   # server answered with 4xx/5xx
+    except urllib.error.HTTPError as e:
         try:
             return e.code, json.loads(e.read() or b"null")
         except ValueError:
@@ -80,13 +67,11 @@ def _background(fn, *args):
 
 
 class Client:
-    """Shared state the game reads every frame; worker threads only assign whole values."""
 
     def __init__(self):
-        self.last_submit = None   # dict(state="sending"|"ok"|"error", points=.., rank=.., msg=..)
-        self.boards = {}          # board label -> dict(state=.., entries=[..], me=.., at=time)
+        self.last_submit = None
+        self.boards = {}
 
-    # ---- POST /api/scores
     def submit(self, player, monster, difficulty, mode, won, hp_pct, fight_seconds):
         body = dict(playerName=player, monster=monster, difficulty=difficulty, mode=mode,
                     won=bool(won), hpLeftPercent=int(hp_pct), fightSeconds=round(float(fight_seconds), 2),
@@ -103,12 +88,11 @@ class Client:
             else:
                 msg = (data or {}).get("detail") or ("server error %d" % code)
                 status.update(state="error", msg=msg)
-        except Exception:   # offline, timeout, bad JSON... never let it reach the game loop
+        except Exception:
             status.update(state="error", msg="leaderboard offline - score not saved")
-        for b in list(self.boards.values()):   # board screens should refetch after a new score
+        for b in list(self.boards.values()):
             b["at"] = 0
 
-    # ---- GET /api/leaderboard/top + GET /api/players/{name}/rank
     def fetch_board(self, label, player, force=False):
         cur = self.boards.get(label)
         if cur and not force and (cur["state"] == "loading" or time.time() - cur["at"] < 10):

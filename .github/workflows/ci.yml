@@ -18,8 +18,6 @@ jobs:
           java-version: "21"
           cache: maven
 
-      # Runs unit, slice and integration tests. Docker is available on GitHub's
-      # Ubuntu runners, so the Testcontainers MySQL + Redis test runs here too.
       - name: Build and test
         run: ./mvnw -B verify
 
